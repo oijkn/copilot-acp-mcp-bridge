@@ -1,0 +1,33 @@
+{
+  "name": "copilot-acp-mcp-bridge",
+  "version": "0.2.1",
+  "description": "Run GitHub Copilot CLI behind a local MCP server through ACP.",
+  "license": "Apache-2.0",
+  "private": false,
+  "type": "commonjs",
+  "bin": {
+    "copilot-acp-mcp-bridge": "./copilot-acp-mcp-bridge.js"
+  },
+  "files": [
+    "copilot-acp-mcp-bridge.js",
+    "README.md",
+    "LICENSE",
+    "docs"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test:unit": "bash test-bridge.sh unit"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "acp",
+    "agent-client-protocol",
+    "github-copilot",
+    "copilot-cli",
+    "stdio",
+    "nodejs"
+  ]
+}
