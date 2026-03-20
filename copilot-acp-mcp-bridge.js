@@ -206,6 +206,8 @@ class AcpSession {
     this.agentInfo      = null;
     this.agentCapabilities = null;
     this.authMethods    = [];
+    this.availableModels = [];
+    this.effectiveModel = null;
     this.pendingRequests = new Map();
     this.activePrompt   = null;
     this.promptCount    = 0;
@@ -261,8 +263,7 @@ class AcpSession {
   async _createSession() {
     try {
       const s = await this._request('session/new', this._sessionNewParams(), this.config.startupTimeoutMs);
-      this.sessionId = s.sessionId;
-      this.sessionStartedAt = new Date().toISOString();
+      this._applySessionInfo(s);
       log('info', `ACP session created ${this.sessionId}`);
     } catch (err) {
       if (!isAuthError(err.data || err)) throw err;
@@ -273,10 +274,20 @@ class AcpSession {
       if (!found) throw makeError(`AUTO_AUTH_METHOD_ID=${this.config.autoAuthMethodId} not advertised`, { authMethods: this.authMethods });
       await this._request('authenticate', { methodId: this.config.autoAuthMethodId }, this.config.startupTimeoutMs);
       const s = await this._request('session/new', this._sessionNewParams(), this.config.startupTimeoutMs);
-      this.sessionId = s.sessionId;
-      this.sessionStartedAt = new Date().toISOString();
+      this._applySessionInfo(s);
       log('info', `ACP session created after auth ${this.sessionId}`);
     }
+  }
+
+  _applySessionInfo(sessionResult) {
+    this.sessionId = sessionResult.sessionId;
+    this.sessionStartedAt = new Date().toISOString();
+    this.availableModels = Array.isArray(sessionResult.models?.availableModels) ? sessionResult.models.availableModels : [];
+    this.effectiveModel =
+      sessionResult.models?.currentModelId ||
+      sessionResult.configOptions?.find?.(o => o.id === 'model')?.currentValue ||
+      this.configuredModel ||
+      null;
   }
 
   _sessionNewParams() {
@@ -560,6 +571,8 @@ class AcpSession {
     this.started = false;
     this.sessionId = null;
     this.sessionStartedAt = null;
+    this.availableModels = [];
+    this.effectiveModel = null;
     this.activePrompt = null;
   }
 
@@ -578,6 +591,7 @@ class AcpSession {
       parts.push(`stopReason: ${stopReason}`);
       parts.push(`sessionId: ${this.sessionId}`);
       parts.push(`configuredModel: ${this.configuredModel || 'default'}`);
+      if (this.effectiveModel) parts.push(`effectiveModel: ${this.effectiveModel}`);
       parts.push(`modelSource: ${this.modelSource}`);
       if (op.requestedModel) parts.push(`requestedModel: ${op.requestedModel}`);
       parts.push(`updates: ${op.updateCount}`);
@@ -617,8 +631,10 @@ class AcpSession {
       agentInfo:         this.agentInfo,
       authMethods:       this.authMethods,
       configuredModel:   this.configuredModel,
+      effectiveModel:    this.effectiveModel,
       modelSource:       this.modelSource,
       bridgeCwd:         this.config.bridgeCwd,
+      availableModels:   this.availableModels,
       mcpServersCount:   this.config.mcpServers.length,
       activePrompt:      this.activePrompt ? {
         mcpRequestId: this.activePrompt.mcpRequestId,
@@ -668,11 +684,13 @@ class McpServer {
     this.freshSessions = new Map();
 
     this.initialized  = false;
+    this.stdinClosed  = false;
+    this.shutdownScheduled = false;
 
     this.rl.on('line', line => this._onLine(line.trim()));
-    process.stdin.on('end', async () => {
-      await this.stopAll('stdin closed');
-      process.exit(0);
+    process.stdin.on('end', () => {
+      this.stdinClosed = true;
+      this._scheduleShutdownWhenIdle('stdin closed');
     });
   }
 
@@ -693,6 +711,35 @@ class McpServer {
     }));
 
     await this.persistent.stop();
+  }
+
+  _hasInFlightWork() {
+    if (this.persistent.pendingRequests.size > 0) return true;
+    if (this.persistent.activePrompt) return true;
+    if (this.freshSessions.size > 0) return true;
+    return false;
+  }
+
+  _scheduleShutdownWhenIdle(reason) {
+    if (!this.stdinClosed || this.shutdownScheduled) return;
+    this.shutdownScheduled = true;
+
+    const poll = async () => {
+      if (this._hasInFlightWork()) {
+        this.shutdownScheduled = false;
+        setTimeout(() => this._scheduleShutdownWhenIdle(reason), 100);
+        return;
+      }
+      await this.stopAll(reason);
+      process.exit(0);
+    };
+
+    setTimeout(() => {
+      poll().catch(err => {
+        log('error', `shutdown on idle failed: ${err.message}`);
+        process.exit(1);
+      });
+    }, 0);
   }
 
   _refreshPersistentSession() {

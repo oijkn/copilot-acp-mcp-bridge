@@ -21,7 +21,7 @@ Run with: `bash test-bridge.sh unit`
 | `initialize` response | protocolVersion, serverInfo name and version |
 | `tools/list` | presence of ask_copilot, copilot_session_status, copilot_reset_session |
 | Schema fields | freshSession, context, allowTools, model present; additionalProperties false |
-| `copilot_session_status` cold | started=false, sessionId=null, promptCount=0, sessionAgeMs=null, persistentConfiguredModel/modelSource present |
+| `copilot_session_status` cold | started=false, sessionId=null, promptCount=0, sessionAgeMs=null, persistentConfiguredModel/effectiveModel/modelSource present |
 | `ping` | returns `{}` |
 | Unknown argument → -32602 | exact error message lists allowed arguments |
 | Multiple unknown arguments → -32602 | both flagged in one error |
@@ -61,7 +61,7 @@ Run with: `bash test-bridge.sh live`
 | `PERMISSION_POLICY=cancel` | Requires Copilot to actually request a permission during a test prompt |
 | `PREFERRED_PERMISSION_OPTION_ID` | Same constraint as above |
 | Effective backend model detection | Copilot ACP does not currently document a machine-readable effective model field |
-| `freshSession:true` + `model` live path | Not yet covered end-to-end against a real Copilot instance |
+| `freshSession:true` + `model` live path | Needs a real Copilot session and should verify telemetry includes requestedModel/configuredModel/effectiveModel |
 | Persistent model conflict with a live running session | Needs a real persistent session started with model A, then a second persistent request with model B |
 
 ## How to add a live test

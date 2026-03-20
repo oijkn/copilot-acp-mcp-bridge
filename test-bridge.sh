@@ -89,6 +89,7 @@ assert_contains "status -> sessionId null" 'sessionId' "$OUT"
 assert_contains "status -> promptCount 0" 'promptCount' "$OUT"
 assert_contains "status -> sessionAgeMs null" 'sessionAgeMs' "$OUT"
 assert_contains "status -> persistentConfiguredModel present" 'persistentConfiguredModel' "$OUT"
+assert_contains "status -> effectiveModel present" 'effectiveModel' "$OUT"
 assert_contains "status -> modelSource present" 'modelSource' "$OUT"
 
 OUT=$(run_bridge "$INIT" "$PING")
@@ -178,6 +179,18 @@ else
   assert_contains "freshSession -> response received" '"content"' "$OUT"
   assert_contains "freshSession -> stopReason" 'stopReason' "$OUT"
 
+  section "LIVE - freshSession:true + model"
+
+  OUT=$(COPILOT_ACP_BRIDGE_CWD="$CWD" timeout 90 node "$BRIDGE" << MCPEOF 2>/dev/null
+$INIT
+{"jsonrpc":"2.0","id":35,"method":"tools/call","params":{"name":"ask_copilot","arguments":{"prompt":"Reply with exactly the word: MODEL","freshSession":true,"model":"gpt-5.2"}}}
+MCPEOF
+)
+  assert_contains "freshSession + model -> response received" '"content"' "$OUT"
+  assert_contains "freshSession + model -> requestedModel" 'requestedModel: gpt-5.2' "$OUT"
+  assert_contains "freshSession + model -> configuredModel" 'configuredModel: gpt-5.2' "$OUT"
+  assert_contains "freshSession + model -> effectiveModel" 'effectiveModel:' "$OUT"
+
   section "LIVE - context injection"
 
   OUT=$(COPILOT_ACP_BRIDGE_CWD="$CWD" run_bridge \
@@ -185,6 +198,21 @@ else
     '{"jsonrpc":"2.0","id":40,"method":"tools/call","params":{"name":"ask_copilot","arguments":{"prompt":"What is the secret code?","context":"The secret code is ALPHA-7.","freshSession":true}}}')
   assert_contains "context -> response received" '"content"' "$OUT"
   assert_contains "context -> ALPHA-7 present" 'ALPHA-7' "$OUT"
+
+  section "LIVE - persistent model conflict"
+
+  OUT=$(COPILOT_ACP_BRIDGE_CWD="$CWD" timeout 90 node "$BRIDGE" << MCPEOF 2>/dev/null
+$INIT
+{"jsonrpc":"2.0","id":90,"method":"tools/call","params":{"name":"ask_copilot","arguments":{"prompt":"Reply with exactly the word: MODEL_A","model":"gpt-5.2"}}}
+{"jsonrpc":"2.0","id":91,"method":"tools/call","params":{"name":"ask_copilot","arguments":{"prompt":"Reply with exactly the word: MODEL_B","model":"claude-sonnet-4.6"}}}
+MCPEOF
+)
+  assert_contains "persistent model conflict -> first call responded" '"id":90' "$OUT"
+  assert_contains "persistent model conflict -> second call error id" '"id":91' "$OUT"
+  assert_contains "persistent model conflict -> code -32602" '"code":-32602' "$OUT"
+  assert_contains "persistent model conflict -> reason" '"reason":"persistent_model_conflict"' "$OUT"
+  assert_contains "persistent model conflict -> configuredModel" '"configuredModel":"gpt-5.2"' "$OUT"
+  assert_contains "persistent model conflict -> requestedModel" '"requestedModel":"claude-sonnet-4.6"' "$OUT"
 
   section "LIVE - allowTools:false (hard block in _onPermission)"
 
