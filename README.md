@@ -121,7 +121,7 @@ Model semantics:
 - `freshSession: true` + `model` starts a disposable Copilot process with `--model <name>`
 - the first persistent call may also set `model`; that choice is then fixed until `copilot_reset_session`
 - a later persistent call that requests a different model is rejected with `-32602`
-- `effectiveModel` is read from the ACP `session/new` response when Copilot exposes it
+- `effectiveModel` is an observed model value read from the ACP `session/new` response when Copilot exposes it
 
 Session modes:
 
@@ -131,6 +131,11 @@ Session modes:
 ### `copilot_session_status`
 
 Returns the current state of the persistent session: `sessionId`, `sessionAgeMs`, `promptCount`, `agentInfo`, `persistentConfiguredModel`, `effectiveModel`, `modelSource`, `availableModels`, `activePrompt`.
+
+- `persistentConfiguredModel`: the model this bridge configured for the persistent session
+- `effectiveModel`: the observed model returned by ACP `session/new`, when available
+- `modelSource`: where the configured model came from (`default`, `env:copilot_args_json`, `ask_copilot:first_persistent_call`, or `ask_copilot:fresh_session`)
+- `availableModels`: models advertised by Copilot in `session/new`, when available
 
 ### `copilot_reset_session`
 
